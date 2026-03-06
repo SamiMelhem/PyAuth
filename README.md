@@ -8,10 +8,10 @@ Learn from the best parts of [Better Auth](https://better-auth.com), [django-all
 
 [Vision](#about-the-project) · [MVP](#mvp) · [Development](#development) · [Issues](../../issues)
 
-[![Python](https://img.shields.io/pypi/pyversions/fastapi?style=flat&colorA=000000&colorB=000000)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/pypi/v/fastapi?style=flat&colorA=000000&colorB=000000)](https://pypi.org/project/fastapi/)
-[![SQLAlchemy](https://img.shields.io/pypi/v/sqlalchemy?style=flat&colorA=000000&colorB=000000)](https://pypi.org/project/sqlalchemy/)
-[![Pydantic](https://img.shields.io/pypi/v/pydantic?style=flat&colorA=000000&colorB=000000)](https://pypi.org/project/pydantic/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-000000?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/pypi/v/fastapi?style=flat&colorA=000000&colorB=000000&logo=fastapi&logoColor=white)](https://pypi.org/project/fastapi/)
+[![SQLAlchemy](https://img.shields.io/pypi/v/sqlalchemy?style=flat&colorA=000000&colorB=000000&logo=sqlalchemy&logoColor=white)](https://pypi.org/project/sqlalchemy/)
+[![Pydantic](https://img.shields.io/pypi/v/pydantic?style=flat&colorA=000000&colorB=000000&logo=pydantic&logoColor=white)](https://pypi.org/project/pydantic/)
 
 </div>
 
