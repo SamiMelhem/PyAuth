@@ -20,7 +20,11 @@ sqlalchemy = [
     "sqlalchemy>=2.0.48",
 ]
 
-[dependency.groups]
+[dependency-groups]
 dev = [
     "pytest>=9.0.2",
 ]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"

@@ -1,6 +1,7 @@
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric import rsa
+from typing import Any
 import pytest
 from pydantic import ValidationError
 
@@ -115,7 +116,7 @@ def test_pyauth_settings_reject_non_positive_access_token_ttl() -> None:
     ],
 )
 def test_pyauth_settings_reject_other_invalid_security_numbers(
-    kwargs: dict[str, object],
+    kwargs: dict[str, Any],
     field_name: str,
 ) -> None:
     private_pem, public_pem = build_ed25519_key_pair()

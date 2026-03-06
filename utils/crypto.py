@@ -45,8 +45,13 @@ class TokenService:
         self.settings = settings
         self.refresh_settings = refresh_settings or RefreshTokenSettings()
         self._registry = JWSRegistry(algorithms=[settings.algorithm])
-        self._private_key = jwk.import_key(settings.private_key_pem, "OKP")
-        self._public_key = jwk.import_key(settings.public_key_pem, "OKP")
+        private_key_pem = settings.private_key_pem
+        public_key_pem = settings.public_key_pem
+        if private_key_pem is None or public_key_pem is None:
+            # Runtime safeguard; config validation should prevent this state.
+            raise TokenError("JWT key material is missing", code="configuration_error")
+        self._private_key = jwk.import_key(private_key_pem, "OKP")
+        self._public_key = jwk.import_key(public_key_pem, "OKP")
 
     def issue_access_token(
         self,
