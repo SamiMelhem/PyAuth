@@ -1,0 +1,10 @@
+[project]
+name = "pyauth"
+version = "0.1.0"
+description = "Authentication library for Python"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.109.0",
+    "sqlalchemy>=2.0.48",
+    "pydantic>=2.12.5",
+]
