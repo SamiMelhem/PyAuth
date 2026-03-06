@@ -2,9 +2,25 @@
 name = "pyauth"
 version = "0.1.0"
 description = "Authentication library for Python"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.109.0",
-    "sqlalchemy>=2.0.48",
     "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "cryptography>=46.0.5",
+    "joserfc>=1.6.3",
+    "pwdlib[argon2]>=0.3.0",
+    "argon2-cffi>=25.1.0",
+]
+
+[project.optional-dependencies]
+fastapi = [
+    "fastapi>=0.135.1",
+]
+sqlalchemy = [
+    "sqlalchemy>=2.0.48",
+]
+
+[dependency.groups]
+dev = [
+    "pytest>=9.0.2",
 ]

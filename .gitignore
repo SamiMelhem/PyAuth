@@ -43,3 +43,6 @@ Thumbs.db
 
 # Ruff
 .ruff_cache/
+
+# Local git worktrees
+.worktrees/
