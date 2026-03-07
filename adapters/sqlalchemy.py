@@ -12,7 +12,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from adapters.base import BaseAdapter
 from core.errors import AdapterError
-from schema.models import Account, Session, User, Verification, utc_now
+from schema.models import Account, Session, User, Verification, VerificationPurpose, utc_now
 
 
 class Base(DeclarativeBase):
@@ -225,6 +225,20 @@ class SQLAlchemyAdapter(BaseAdapter):
             record = await session.get(UserRecord, user_id)
             return None if record is None else self._to_user(record)
 
+    async def update_user(self, user: User) -> User:
+        async with self._session_scope() as session:
+            record = await session.get(UserRecord, user.id)
+            if record is None:
+                raise AdapterError("User not found", code="user_not_found")
+            record.email = user.email
+            record.email_normalized = user.email_normalized or user.email.strip().lower()
+            record.email_verified = user.email_verified
+            record.name = user.name
+            record.image = user.image
+            record.updated_at = utc_now()
+            await self._finalize_write(session, refresh_record=record)
+            return self._to_user(record)
+
     async def get_user_by_email(self, email: str) -> User | None:
         normalized_email = email.strip().lower()
         async with self._session_scope() as session:
@@ -274,6 +288,21 @@ class SQLAlchemyAdapter(BaseAdapter):
                 select(AccountRecord).where(AccountRecord.user_id == user_id)
             )
             return [self._to_account(record) for record in result.scalars().all()]
+
+    async def get_account_by_user_id_and_provider(
+        self,
+        user_id: str,
+        provider: str,
+    ) -> Account | None:
+        async with self._session_scope() as session:
+            result = await session.execute(
+                select(AccountRecord).where(
+                    AccountRecord.user_id == user_id,
+                    AccountRecord.provider == provider,
+                )
+            )
+            record = result.scalar_one_or_none()
+            return None if record is None else self._to_account(record)
 
     async def update_account(self, account: Account) -> Account:
         async with self._session_scope() as session:
@@ -383,6 +412,25 @@ class SQLAlchemyAdapter(BaseAdapter):
             record.updated_at = utc_now()
             await self._finalize_write(session, refresh_record=record)
             return self._to_verification(record)
+
+    async def delete_verifications_by_identifier_and_purpose(
+        self,
+        *,
+        identifier: str,
+        purpose: VerificationPurpose,
+    ) -> int:
+        async with self._session_scope() as session:
+            result = cast(
+                CursorResult[Any],
+                await session.execute(
+                    delete(VerificationRecord).where(
+                        VerificationRecord.identifier == identifier,
+                        VerificationRecord.purpose == purpose.value,
+                    )
+                ),
+            )
+            await self._finalize_write(session)
+            return int(result.rowcount or 0)
 
     async def delete_expired_verifications(self) -> int:
         async with self._session_scope() as session:

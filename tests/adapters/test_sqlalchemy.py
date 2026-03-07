@@ -163,3 +163,75 @@ async def test_sqlalchemy_adapter_deletes_expired_verifications(
 
     assert deleted_count == 1
     assert fetched is None
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_adapter_updates_user_email_verification_state(
+    sqlite_adapter: SQLAlchemyAdapter,
+) -> None:
+    user = await sqlite_adapter.create_user(User(email="sami@example.com"))
+    updated = await sqlite_adapter.update_user(
+        user.model_copy(update={"email_verified": True})
+    )
+
+    assert updated.email_verified is True
+
+    fetched = await sqlite_adapter.get_user_by_id(user.id)
+    assert fetched is not None
+    assert fetched.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_adapter_fetches_account_by_user_id_and_provider(
+    sqlite_adapter: SQLAlchemyAdapter,
+) -> None:
+    user = await sqlite_adapter.create_user(User(email="sami@example.com"))
+    account = await sqlite_adapter.create_account(
+        Account(
+            user_id=user.id,
+            provider="credentials",
+            provider_account_id=user.id,
+            password_hash="hashed-password",
+        )
+    )
+
+    fetched = await sqlite_adapter.get_account_by_user_id_and_provider(
+        user.id,
+        "credentials",
+    )
+
+    assert fetched is not None
+    assert fetched.id == account.id
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_adapter_replaces_existing_verifications_by_identifier_and_purpose(
+    sqlite_adapter: SQLAlchemyAdapter,
+) -> None:
+    first = await sqlite_adapter.create_verification(
+        Verification(
+            identifier="sami@example.com",
+            purpose=VerificationPurpose.EMAIL_VERIFICATION,
+            token_hash="verification-token-1",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+    )
+
+    deleted_count = await sqlite_adapter.delete_verifications_by_identifier_and_purpose(
+        identifier="sami@example.com",
+        purpose=VerificationPurpose.EMAIL_VERIFICATION,
+    )
+
+    second = await sqlite_adapter.create_verification(
+        Verification(
+            identifier="sami@example.com",
+            purpose=VerificationPurpose.EMAIL_VERIFICATION,
+            token_hash="verification-token-2",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+    )
+
+    assert deleted_count == 1
+    assert first.id != second.id
+    assert await sqlite_adapter.get_verification_by_token_hash("verification-token-1") is None
+    assert await sqlite_adapter.get_verification_by_token_hash("verification-token-2") is not None

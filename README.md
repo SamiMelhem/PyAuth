@@ -44,7 +44,7 @@ PyAuth exists to explore a more unified approach:
 
 ## MVP
 
-The MVP is intentionally focused on the smallest useful surface area needed to prove the architecture.
+The MVP is intentionally focused on the smallest useful surface area needed to prove the architecture. Once Phase 3 is completed, the MVP should cover local credentials, database-backed browser sessions, provider login for Google and GitHub, and email-driven verification and recovery flows on top of one shared core.
 
 ### 1. Core Architecture
 
@@ -72,20 +72,20 @@ PyAuth uses an adapter pattern so auth logic can stay stable while persistence e
 
 #### Email and Password
 
-- Registration with email validation, password strength checks, password hashing, and user creation.
+- Registration with normalized email handling, modern password policy, Argon2id hashing, and user creation.
 - Login with credential lookup, password verification, and session creation.
-- Password reset with secure token generation, email delivery, token verification, and password update.
+- Password reset with single-use hashed recovery tokens, email delivery, token verification, and password update.
 
-Reference: NIST SP 800-63B
+References: NIST SP 800-63B-4, OWASP Authentication Cheat Sheet, OWASP Password Storage Cheat Sheet, OWASP Forgot Password Cheat Sheet
 
 #### Session Management
 
-- High-entropy session token generation.
+- High-entropy opaque session token generation.
 - Database-backed session storage.
-- Support for storing either hashed tokens or raw tokens, with hashed storage preferred for stronger security.
-- Secure cookie configuration with `HttpOnly`, `Secure`, and `SameSite` controls.
+- Hashed token storage so leaked session tables do not expose bearer secrets directly.
+- Secure cookie defaults with `HttpOnly`, `Secure`, and `SameSite` controls, with room for `__Host-` style deployment defaults.
 
-Reference: RFC 6265
+References: OWASP Session Management Cheat Sheet, MDN Set-Cookie, NIST SP 800-63B-4, RFC 6265
 
 #### Social Authentication
 
@@ -96,19 +96,19 @@ MVP providers:
 
 Core flow requirements:
 
-- State generation to protect against CSRF.
-- Authorization code exchange.
-- Secure account linking when an OAuth identity matches an existing email.
-- PKCE-aware implementation for secure public client flows.
+- One-time `state` generation to protect against CSRF and callback replay.
+- Authorization code exchange with PKCE using `S256`.
+- Provider-subject-based account identity, with cautious email-based linking only when provider data is trustworthy.
+- Exact redirect handling and issuer-aware validation for multi-provider safety.
 
-References: RFC 6749, RFC 7636
+References: RFC 6749, RFC 7636, RFC 9700, RFC 9207, Google Identity docs, GitHub OAuth docs
 
 #### Email Verification
 
-- Verification by magic link or code.
-- Ownership proof through email delivery.
+- Verification by magic link or code using a purpose-scoped, single-use token.
+- Ownership proof through email delivery, separate from lightweight syntax validation.
 
-Reference: RFC 5322
+References: OWASP Input Validation Cheat Sheet, OWASP Authentication Cheat Sheet, RFC 5321
 
 ### 4. Framework Integration
 
@@ -128,13 +128,17 @@ Planned FastAPI integration:
 
 ## MVP Feature Checklist
 
+This checklist mixes the Phase 3 strategy surface with the remaining MVP infrastructure still needed to ship the full package.
+
 | Component | Feature | Details |
 | --- | --- | --- |
 | Core | `PyAuth` class | Main entry point used to initialize config and integrations |
 | Core | Client | Python client, with room for a generated JS client later |
 | Database | `SQLAlchemyAdapter` | Async SQLAlchemy support for PostgreSQL and SQLite |
-| Strategy | Email and Password | Sign up, sign in, password reset |
-| Strategy | OAuth2 | Google and GitHub providers |
+| Strategy | Email and Password | Sign up, sign in, password reset, and modern password policy |
+| Strategy | Session Management | Database-backed opaque sessions with hashed token storage and secure cookie defaults |
+| Strategy | OAuth2 | Google and GitHub authorization-code login with PKCE and cautious account linking |
+| Strategy | Email Verification | Magic-link or code-based email ownership proof with expiring single-use tokens |
 | Security | Rate limiter | Brute-force protection for sign-in endpoints |
 | Security | CSRF | Double-submit cookie or similar protection |
 | Transport | Bearer and Cookie | Browser sessions and API token use cases |
@@ -153,15 +157,22 @@ The intent is not to hard-code auth behavior into each framework independently, 
 
 ## Standards and References
 
-PyAuth is being designed with common authentication and web security standards in mind:
+PyAuth is being designed with common authentication and web security standards in mind. The list below is a compact standards-focused summary; the Phase 3 sections above and `docs/reference/phase-3-auth-strategies.md` include the fuller practical reference set, including MDN and provider documentation.
 
 - RFC 7519: JSON Web Token, if stateless tokens are added.
 - RFC 6749: OAuth 2.0.
 - RFC 7636: PKCE.
+- RFC 9700: OAuth 2.0 security best current practice.
+- RFC 9207: Authorization server issuer identification.
 - RFC 6238: TOTP for future 2FA support.
 - RFC 6265: HTTP cookies, including `Secure` and `HttpOnly`.
-- RFC 5322: Internet message format for email-related flows.
-- NIST SP 800-63B: password and digital identity guidance.
+- RFC 5321: SMTP and mailbox delivery semantics relevant to email flows.
+- NIST SP 800-63B-4: password and session guidance for modern digital identity systems.
+- OWASP Authentication Cheat Sheet: practical web authentication guidance.
+- OWASP Password Storage Cheat Sheet: password hashing guidance, including Argon2id.
+- OWASP Forgot Password Cheat Sheet: password recovery flow guidance.
+- OWASP Session Management Cheat Sheet: session token lifecycle and cookie usage guidance.
+- OWASP Input Validation Cheat Sheet: pragmatic email address validation and verification guidance.
 
 ## Development
 

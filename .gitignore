@@ -46,3 +46,6 @@ Thumbs.db
 
 # Local git worktrees
 .worktrees/
+
+# Sample app database
+pyauth_sample.db

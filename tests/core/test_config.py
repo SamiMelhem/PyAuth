@@ -5,7 +5,17 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from core.config import JwtSettings, PyAuthSettings
+from core.config import (
+    GitHubProviderSettings,
+    GoogleProviderSettings,
+    JwtSettings,
+    MailerSettings,
+    OAuthSettings,
+    PyAuthSettings,
+    SessionSettings,
+    SocialAuthSettings,
+    VerificationSettings,
+)
 
 
 def build_ed25519_key_pair() -> tuple[str, str]:
@@ -41,6 +51,11 @@ def test_pyauth_settings_default_secure_options() -> None:
     assert settings.refresh_token.rotation_enabled is True
     assert settings.cookie.secure is True
     assert settings.cookie.http_only is True
+    assert settings.session.cookie_name == "pyauth_session"
+    assert settings.verification.password_reset_ttl_seconds == 3600
+    assert settings.oauth.state_cookie_name == "pyauth_oauth_state"
+    assert settings.social.google.enabled is False
+    assert settings.mailer.from_email == "no-reply@example.com"
 
 
 def test_pyauth_settings_require_key_material_for_eddsa() -> None:
@@ -133,3 +148,107 @@ def test_pyauth_settings_reject_other_invalid_security_numbers(
         )
 
     assert field_name in str(exc_info.value)
+
+
+def test_pyauth_settings_accept_phase3_provider_and_session_settings() -> None:
+    private_pem, public_pem = build_ed25519_key_pair()
+
+    settings = PyAuthSettings(
+        jwt=JwtSettings(
+            issuer="https://auth.example.com",
+            audience="pyauth-clients",
+            private_key_pem=private_pem,
+            public_key_pem=public_pem,
+        ),
+        session=SessionSettings(
+            ttl_seconds=86_400,
+            cookie_name="__Host-pyauth_session",
+        ),
+        verification=VerificationSettings(
+            email_verification_ttl_seconds=900,
+            password_reset_ttl_seconds=1800,
+        ),
+        oauth=OAuthSettings(
+            state_cookie_name="__Host-pyauth_oauth_state",
+            state_ttl_seconds=600,
+        ),
+        social=SocialAuthSettings(
+            google=GoogleProviderSettings(
+                enabled=True,
+                client_id="google-client-id",
+                client_secret="google-client-secret",
+                redirect_uri="https://auth.example.com/api/auth/callback/google",
+                scopes=["openid", "email", "profile"],
+            ),
+            github=GitHubProviderSettings(
+                enabled=True,
+                client_id="github-client-id",
+                client_secret="github-client-secret",
+                redirect_uri="https://auth.example.com/api/auth/callback/github",
+            ),
+        ),
+        mailer=MailerSettings(
+            from_email="auth@example.com",
+            from_name="PyAuth",
+        ),
+    )
+
+    assert settings.session.ttl_seconds == 86_400
+    assert settings.verification.email_verification_ttl_seconds == 900
+    assert settings.oauth.state_ttl_seconds == 600
+    assert settings.social.google.enabled is True
+    assert settings.social.google.scopes == ["openid", "email", "profile"]
+    assert settings.social.github.redirect_uri is not None
+    assert settings.social.github.redirect_uri.endswith("/github")
+    assert settings.mailer.from_name == "PyAuth"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "field_name"),
+    [
+        ({"session": {"ttl_seconds": 0}}, "session"),
+        ({"verification": {"password_reset_ttl_seconds": 0}}, "verification"),
+        ({"oauth": {"state_ttl_seconds": 0}}, "oauth"),
+    ],
+)
+def test_pyauth_settings_reject_invalid_phase3_ttls(
+    kwargs: dict[str, Any],
+    field_name: str,
+) -> None:
+    private_pem, public_pem = build_ed25519_key_pair()
+
+    with pytest.raises(ValidationError) as exc_info:
+        PyAuthSettings(
+            jwt=JwtSettings(
+                issuer="https://auth.example.com",
+                audience="pyauth-clients",
+                private_key_pem=private_pem,
+                public_key_pem=public_pem,
+            ),
+            **kwargs,
+        )
+
+    assert field_name in str(exc_info.value)
+
+
+def test_pyauth_settings_require_provider_credentials_when_provider_enabled() -> None:
+    private_pem, public_pem = build_ed25519_key_pair()
+
+    with pytest.raises(ValidationError) as exc_info:
+        PyAuthSettings(
+            jwt=JwtSettings(
+                issuer="https://auth.example.com",
+                audience="pyauth-clients",
+                private_key_pem=private_pem,
+                public_key_pem=public_pem,
+            ),
+            social=SocialAuthSettings(
+                google=GoogleProviderSettings(
+                    enabled=True,
+                    client_id="google-client-id",
+                    redirect_uri="https://auth.example.com/api/auth/callback/google",
+                ),
+            ),
+        )
+
+    assert "client_secret" in str(exc_info.value)

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from schema.models import Account, Session, User, Verification
+from schema.models import Account, Session, User, Verification, VerificationPurpose
 
 
 class BaseAdapter(ABC):
     @abstractmethod
     async def create_user(self, user: User) -> User:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_user(self, user: User) -> User:
         raise NotImplementedError
 
     @abstractmethod
@@ -32,6 +36,14 @@ class BaseAdapter(ABC):
 
     @abstractmethod
     async def get_accounts_by_user_id(self, user_id: str) -> list[Account]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_account_by_user_id_and_provider(
+        self,
+        user_id: str,
+        provider: str,
+    ) -> Account | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -71,6 +83,15 @@ class BaseAdapter(ABC):
 
     @abstractmethod
     async def consume_verification(self, verification_id: str) -> Verification | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_verifications_by_identifier_and_purpose(
+        self,
+        *,
+        identifier: str,
+        purpose: VerificationPurpose,
+    ) -> int:
         raise NotImplementedError
 
     @abstractmethod

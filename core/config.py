@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from cryptography.hazmat.primitives import serialization
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -67,6 +67,18 @@ class RefreshTokenSettings(BaseModel):
     digest_algorithm: Literal["sha256"] = "sha256"
 
 
+class SessionSettings(BaseModel):
+    ttl_seconds: int = Field(default=1_209_600, gt=0)
+    cookie_name: str = "pyauth_session"
+
+    @field_validator("cookie_name")
+    @classmethod
+    def validate_cookie_name(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("cookie_name must not be blank")
+        return trimmed
+
 class CookieSettings(BaseModel):
     secure: bool = True
     http_only: bool = True
@@ -82,6 +94,72 @@ class SecuritySettings(BaseModel):
     enable_cookie_sessions: bool = True
 
 
+class VerificationSettings(BaseModel):
+    email_verification_ttl_seconds: int = Field(default=86_400, gt=0)
+    password_reset_ttl_seconds: int = Field(default=3_600, gt=0)
+
+
+class OAuthSettings(BaseModel):
+    state_cookie_name: str = "pyauth_oauth_state"
+    state_ttl_seconds: int = Field(default=600, gt=0)
+
+    @field_validator("state_cookie_name")
+    @classmethod
+    def validate_state_cookie_name(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("state_cookie_name must not be blank")
+        return trimmed
+
+
+class SocialProviderSettings(BaseModel):
+    enabled: bool = False
+    client_id: str | None = None
+    client_secret: str | None = None
+    redirect_uri: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_enabled_provider(self) -> "SocialProviderSettings":
+        if self.enabled:
+            missing = [
+                field_name
+                for field_name in ("client_id", "client_secret", "redirect_uri")
+                if not getattr(self, field_name)
+            ]
+            if missing:
+                raise ValueError(
+                    f"Enabled social providers require values for: {', '.join(missing)}"
+                )
+        return self
+
+
+class GoogleProviderSettings(SocialProviderSettings):
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "email", "profile"])
+
+
+class GitHubProviderSettings(SocialProviderSettings):
+    scopes: list[str] = Field(default_factory=lambda: ["read:user", "user:email"])
+
+
+class SocialAuthSettings(BaseModel):
+    google: GoogleProviderSettings = Field(default_factory=GoogleProviderSettings)
+    github: GitHubProviderSettings = Field(default_factory=GitHubProviderSettings)
+
+
+class MailerSettings(BaseModel):
+    from_email: str = "no-reply@example.com"
+    from_name: str | None = None
+
+    @field_validator("from_email")
+    @classmethod
+    def validate_from_email(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("from_email must not be blank")
+        return trimmed
+
+
 class PyAuthSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PYAUTH_",
@@ -93,5 +171,10 @@ class PyAuthSettings(BaseSettings):
     password_hash: PasswordHashSettings = Field(default_factory=PasswordHashSettings)
     jwt: JwtSettings
     refresh_token: RefreshTokenSettings = Field(default_factory=RefreshTokenSettings)
+    session: SessionSettings = Field(default_factory=SessionSettings)
     cookie: CookieSettings = Field(default_factory=CookieSettings)
+    verification: VerificationSettings = Field(default_factory=VerificationSettings)
+    oauth: OAuthSettings = Field(default_factory=OAuthSettings)
+    social: SocialAuthSettings = Field(default_factory=SocialAuthSettings)
+    mailer: MailerSettings = Field(default_factory=MailerSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
