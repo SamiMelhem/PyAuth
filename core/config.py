@@ -60,6 +60,26 @@ class JwtSettings(BaseModel):
                 raise ValueError("EdDSA key material must use a matching Ed25519 key pair.")
         return self
 
+    @classmethod
+    def generate(cls, *, issuer: str, audience: str, key_id: str | None = None) -> "JwtSettings":
+        private_key = Ed25519PrivateKey.generate()
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode()
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        return cls(
+            issuer=issuer,
+            audience=audience,
+            private_key_pem=private_pem,
+            public_key_pem=public_pem,
+            key_id=key_id,
+        )
+
 
 class RefreshTokenSettings(BaseModel):
     token_bytes: int = Field(default=32, gt=0)
@@ -178,3 +198,35 @@ class PyAuthSettings(BaseSettings):
     social: SocialAuthSettings = Field(default_factory=SocialAuthSettings)
     mailer: MailerSettings = Field(default_factory=MailerSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+
+    @classmethod
+    def for_development(
+        cls,
+        *,
+        issuer: str,
+        audience: str,
+        password_hash: PasswordHashSettings | None = None,
+        refresh_token: RefreshTokenSettings | None = None,
+        session: SessionSettings | None = None,
+        cookie: CookieSettings | None = None,
+        verification: VerificationSettings | None = None,
+        oauth: OAuthSettings | None = None,
+        social: SocialAuthSettings | None = None,
+        mailer: MailerSettings | None = None,
+        security: SecuritySettings | None = None,
+        key_id: str | None = None,
+    ) -> "PyAuthSettings":
+        dev_cookie = cookie or CookieSettings(secure=False)
+        dev_security = security or SecuritySettings(require_https=False)
+        return cls(
+            password_hash=password_hash or PasswordHashSettings(),
+            jwt=JwtSettings.generate(issuer=issuer, audience=audience, key_id=key_id),
+            refresh_token=refresh_token or RefreshTokenSettings(),
+            session=session or SessionSettings(),
+            cookie=dev_cookie,
+            verification=verification or VerificationSettings(),
+            oauth=oauth or OAuthSettings(),
+            social=social or SocialAuthSettings(),
+            mailer=mailer or MailerSettings(),
+            security=dev_security,
+        )

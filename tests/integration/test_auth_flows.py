@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 from adapters.sqlalchemy import SQLAlchemyAdapter
 from core.auth import PyAuth
 from core.config import GoogleProviderSettings, JwtSettings, PyAuthSettings, SocialAuthSettings
-from framework.fastapi import create_auth_router, get_current_user
+from framework.fastapi import PyAuthRouter
 from providers.base import AuthorizationRequest, SocialIdentity
 from utils.mailer import InMemoryMailer
 
@@ -92,10 +92,11 @@ async def sqlite_adapter() -> AsyncIterator[SQLAlchemyAdapter]:
 
 def build_app(auth: PyAuth) -> FastAPI:
     app = FastAPI()
-    app.include_router(create_auth_router(auth))
+    router = PyAuthRouter(auth)
+    router.mount_fastapi(app)
 
     @app.get("/me")
-    async def read_me(current_user=Depends(get_current_user(auth))):  # type: ignore[name-defined]
+    async def read_me(current_user=Depends(router.get_current_user())):  # type: ignore[name-defined]
         return {"id": current_user.id, "email": current_user.email}
 
     return app

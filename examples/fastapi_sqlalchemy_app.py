@@ -1,5 +1,5 @@
 """
-Post-Phase 3 sample: FastAPI + SQLAlchemy + PyAuth
+Post-Phase 4 sample: FastAPI + SQLAlchemy + PyAuth
 
 Run from project root:
   uv sync --extra fastapi --extra sqlalchemy
@@ -16,57 +16,22 @@ Then try:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from adapters.sqlalchemy import SQLAlchemyAdapter
-from core.auth import PyAuth
 from core.config import (
     GoogleProviderSettings,
     GitHubProviderSettings,
-    JwtSettings,
-    PyAuthSettings,
     SocialAuthSettings,
 )
-from core.mailer import MailMessage, Mailer
-from framework.fastapi import create_auth_router, get_current_user
-
-
-def _generate_jwt_keys() -> tuple[str, str]:
-    private_key = Ed25519PrivateKey.generate()
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
-    return private_pem, public_pem
-
-
-class ConsoleMailer(Mailer):
-    """Prints verification and reset emails to stdout instead of sending."""
-
-    async def send(self, message: MailMessage) -> None:
-        print(f"\n[Mail] to={message.to_email} subject={message.subject}")
-        print("-" * 60)
-        print(message.text_body)
-        print("-" * 60)
+from pyauth import ConsoleMailer, PyAuth, PyAuthRouter, PyAuthSettings
 
 
 def build_settings() -> PyAuthSettings:
-    private_pem, public_pem = _generate_jwt_keys()
-    return PyAuthSettings(
-        jwt=JwtSettings(
-            issuer="http://localhost:8000",
-            audience="pyauth-sample",
-            private_key_pem=private_pem,
-            public_key_pem=public_pem,
-        ),
+    return PyAuthSettings.for_development(
+        issuer="http://localhost:8000",
+        audience="pyauth-sample",
         social=SocialAuthSettings(
             google=GoogleProviderSettings(
                 enabled=True,
@@ -97,15 +62,20 @@ session_factory = async_sessionmaker(engine, expire_on_commit=False)
 adapter = SQLAlchemyAdapter(session_factory=session_factory)
 
 settings = build_settings()
-auth = PyAuth(settings=settings, adapter=adapter, mailer=ConsoleMailer())
+auth = PyAuth(
+    settings=settings,
+    adapter=adapter,
+    mailer=ConsoleMailer(),
+)
+auth_router = PyAuthRouter(auth)
 
 app = FastAPI(
     title="PyAuth Sample",
-    description="Post-Phase 3 demo: FastAPI + SQLAlchemy + PyAuth",
+    description="Phase 4 demo: FastAPI + SQLAlchemy + PyAuthRouter",
     lifespan=lifespan,
 )
 
-app.include_router(create_auth_router(auth))
+auth_router.mount_fastapi(app)
 
 
 @app.get("/")
@@ -128,6 +98,10 @@ async def root():
 
 
 @app.get("/me")
-async def me(current_user=Depends(get_current_user(auth))):
+async def me(current_user=Depends(auth_router.get_current_user())):
     """Protected route: returns the current user when session cookie is valid."""
+    return {"user": current_user.model_dump(mode="json")}
+
+@app.get('/api-me')
+async def api_me(current_user=Depends(auth_router.get_current_user_bearer())):
     return {"user": current_user.model_dump(mode="json")}

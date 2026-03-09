@@ -16,3 +16,14 @@ class Mailer(ABC):
     @abstractmethod
     async def send(self, message: MailMessage) -> None:
         raise NotImplementedError
+
+
+class ConsoleMailer(Mailer):
+    async def send(self, message: MailMessage) -> None:
+        print(f"\n[PyAuth Mail] to={message.to_email} subject={message.subject}")
+        print("-" * 60)
+        print(message.text_body)
+        if message.html_body:
+            print("-" * 60)
+            print(message.html_body)
+        print("-" * 60)

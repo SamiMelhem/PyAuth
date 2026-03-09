@@ -49,3 +49,6 @@ Thumbs.db
 
 # Sample app database
 pyauth_sample.db
+
+# Local curl/testing cookies
+cookies.txt

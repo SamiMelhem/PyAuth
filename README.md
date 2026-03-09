@@ -44,105 +44,49 @@ PyAuth exists to explore a more unified approach:
 
 ## MVP
 
-The MVP is intentionally focused on the smallest useful surface area needed to prove the architecture. Once Phase 3 is completed, the MVP should cover local credentials, database-backed browser sessions, provider login for Google and GitHub, and email-driven verification and recovery flows on top of one shared core.
+The current MVP is a working authentication stack for Python backend applications built around one shared core, one production-oriented adapter story, and one shipped framework integration path.
 
-### 1. Core Architecture
+### Current MVP
 
-- `PyAuth` main entry point for configuration and framework integration.
-- A typed config schema powered by Pydantic v2 for settings such as session expiration, hashing configuration, and cookie behavior.
-- Standardized error handling through a unified `PyAuthError` abstraction that can map cleanly to framework-specific HTTP responses.
-- Crypto utilities for:
-  - Password hashing with Argon2id.
-  - Secure token generation for sessions and verification flows.
-
-### 2. Data Layer
-
-PyAuth uses an adapter pattern so auth logic can stay stable while persistence evolves.
-
-- An abstract base adapter with shared operations such as `create_user`, `get_user_by_email`, `create_session`, and `update_account`.
-- A standard schema shape that adapters must map to:
-  - User
-  - Account
-  - Session
-  - Verification
-- MVP adapter target:
-  - Async SQLAlchemy adapter for PostgreSQL and SQLite.
-
-### 3. Authentication Strategies
-
-#### Email and Password
-
-- Registration with normalized email handling, modern password policy, Argon2id hashing, and user creation.
-- Login with credential lookup, password verification, and session creation.
-- Password reset with single-use hashed recovery tokens, email delivery, token verification, and password update.
-
-References: NIST SP 800-63B-4, OWASP Authentication Cheat Sheet, OWASP Password Storage Cheat Sheet, OWASP Forgot Password Cheat Sheet
-
-#### Session Management
-
-- High-entropy opaque session token generation.
-- Database-backed session storage.
-- Hashed token storage so leaked session tables do not expose bearer secrets directly.
-- Secure cookie defaults with `HttpOnly`, `Secure`, and `SameSite` controls, with room for `__Host-` style deployment defaults.
-
-References: OWASP Session Management Cheat Sheet, MDN Set-Cookie, NIST SP 800-63B-4, RFC 6265
-
-#### Social Authentication
-
-MVP providers:
-
-- Google
-- GitHub
-
-Core flow requirements:
-
-- One-time `state` generation to protect against CSRF and callback replay.
-- Authorization code exchange with PKCE using `S256`.
-- Provider-subject-based account identity, with cautious email-based linking only when provider data is trustworthy.
-- Exact redirect handling and issuer-aware validation for multi-provider safety.
-
-References: RFC 6749, RFC 7636, RFC 9700, RFC 9207, Google Identity docs, GitHub OAuth docs
-
-#### Email Verification
-
-- Verification by magic link or code using a purpose-scoped, single-use token.
-- Ownership proof through email delivery, separate from lightweight syntax validation.
-
-References: OWASP Input Validation Cheat Sheet, OWASP Authentication Cheat Sheet, RFC 5321
-
-### 4. Framework Integration
-
-PyAuth will expose a translation layer so the core system is not tied directly to one framework request object.
-
-- `PyAuthRequest` as the normalized request abstraction.
-- MVP framework target:
-  - FastAPI / Starlette
-
-Planned FastAPI integration:
-
-- `PyAuthRouter` for mounting endpoints such as:
-  - `/api/auth/sign-in`
-  - `/api/auth/sign-up`
-  - `/api/auth/callback/{provider}`
-- `get_current_user` dependency that reads the session cookie, validates the session, and returns the user.
+- `PyAuth` is the main entry point for auth configuration, flows, tokens, and integrations.
+- `PyAuthSettings` provides typed Pydantic v2 configuration for hashing, JWTs, sessions, cookies, OAuth, verification, and mailer behavior.
+- `PyAuthError` and its typed subclasses provide a unified error model that maps cleanly into framework responses.
+- The data layer uses an adapter pattern, with async `SQLAlchemyAdapter` support for SQLite and PostgreSQL-shaped deployments.
+- The shared schema model covers `User`, `Account`, `Session`, and `Verification`.
+- Local credentials are implemented with email normalization, Argon2id password hashing, sign-up, sign-in, sign-out, and password reset.
+- Session management uses high-entropy opaque session tokens, hashed token storage, and secure cookie defaults.
+- Bearer transport is also supported through JWT access tokens and framework bearer dependencies.
+- Social auth is implemented for Google and GitHub using authorization-code flow with PKCE, state validation, and cautious account linking.
+- Email verification is implemented with purpose-scoped, single-use verification tokens delivered through the mailer interface.
+- `PyAuthRequest` is the normalized request abstraction for framework integrations.
+- `PyAuthRouter` is the framework-agnostic integration API, with FastAPI / Starlette as the first shipped adapter.
+- The FastAPI adapter supports:
+  - `PyAuthRouter(...).for_fastapi()`
+  - `PyAuthRouter(...).mount_fastapi(app)`
+  - `PyAuthRouter(...).get_current_user()`
+  - `PyAuthRouter(...).get_current_user_bearer()`
+  - mounted auth endpoints for sign-up, sign-in, sign-out, password reset, email verification, OAuth start, and OAuth callback
+- Local development DX includes `PyAuthSettings.for_development(...)` for generated dev JWT keys and `ConsoleMailer` for console-delivered verification and recovery messages.
 
 ## MVP Feature Checklist
 
-This checklist mixes the Phase 3 strategy surface with the remaining MVP infrastructure still needed to ship the full package.
+This checklist reflects the current MVP surface available in the repository today.
 
 | Component | Feature | Details |
 | --- | --- | --- |
-| Core | `PyAuth` class | Main entry point used to initialize config and integrations |
-| Core | Client | Python client, with room for a generated JS client later |
-| Database | `SQLAlchemyAdapter` | Async SQLAlchemy support for PostgreSQL and SQLite |
-| Strategy | Email and Password | Sign up, sign in, password reset, and modern password policy |
+| Core | `PyAuth` | Main entry point used to initialize settings, auth flows, tokens, and integrations |
+| Core | `PyAuthSettings` | Typed configuration for hashing, JWTs, sessions, cookies, OAuth, verification, and mailer settings |
+| Core | Errors | Unified `PyAuthError` hierarchy for framework-friendly auth errors |
+| Database | `SQLAlchemyAdapter` | Async SQLAlchemy adapter for SQLite and PostgreSQL-style deployments |
+| Schema | Auth models | Shared `User`, `Account`, `Session`, and `Verification` schema model |
+| Strategy | Email and Password | Sign up, sign in, sign out, password reset, and modern password hashing with Argon2id |
 | Strategy | Session Management | Database-backed opaque sessions with hashed token storage and secure cookie defaults |
-| Strategy | OAuth2 | Google and GitHub authorization-code login with PKCE and cautious account linking |
-| Strategy | Email Verification | Magic-link or code-based email ownership proof with expiring single-use tokens |
-| Security | Rate limiter | Brute-force protection for sign-in endpoints |
-| Security | CSRF | Double-submit cookie or similar protection |
-| Transport | Bearer and Cookie | Browser sessions and API token use cases |
-| Utils | Mailer | Simple SMTP interface for verification and recovery emails |
+| Strategy | OAuth2 | Google and GitHub authorization-code login with PKCE, state validation, and account linking |
+| Strategy | Email Verification | Single-use verification tokens for email ownership proof |
+| Transport | Bearer and Cookie | Cookie auth via `get_current_user()` and bearer auth via `get_current_user_bearer()` |
+| Framework | `PyAuthRouter` | Framework-agnostic router API with FastAPI / Starlette as the first shipped adapter |
+| Framework | `PyAuthRequest` | Normalized request abstraction for framework integrations |
+| DX | Development helpers | `PyAuthSettings.for_development(...)` and built-in `ConsoleMailer` |
 
 ## Supported Framework Direction
 

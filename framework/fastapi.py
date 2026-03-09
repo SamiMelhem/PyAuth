@@ -3,13 +3,13 @@ from __future__ import annotations
 import secrets
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from core.auth import PyAuth
 from core.errors import AuthenticationError, PyAuthError, ValidationError
 from framework.base import OAuthStateCookieManager
-from framework.request import build_request_context
+from framework.router import PyAuthRouter
 from framework.schemas import (
     EmailVerificationConfirmBody,
     EmailVerificationRequestBody,
@@ -25,6 +25,8 @@ def _error_response(error: PyAuthError) -> JSONResponse:
 
 
 def _set_session_cookie(auth: PyAuth, response: Response, session_token: str) -> None:
+    if not auth.settings.security.enable_cookie_sessions:
+        return
     response.set_cookie(
         key=auth.settings.session.cookie_name,
         value=session_token,
@@ -45,8 +47,14 @@ def _clear_session_cookie(auth: PyAuth, response: Response) -> None:
     )
 
 
-def get_current_user(auth: PyAuth) -> Callable[..., Any]:
+def build_current_user_dependency(auth: PyAuth) -> Callable[..., Any]:
     async def dependency(request: Request):
+        if not auth.settings.security.enable_cookie_sessions:
+            error = AuthenticationError(
+                "Cookie session transport is disabled",
+                code="cookie_transport_disabled",
+            )
+            raise HTTPException(status_code=error.status_code, detail=error.to_dict())
         session_token = request.cookies.get(auth.settings.session.cookie_name)
         if not session_token:
             error = AuthenticationError("Session cookie is missing", code="missing_session")
@@ -60,9 +68,45 @@ def get_current_user(auth: PyAuth) -> Callable[..., Any]:
     return dependency
 
 
-def create_auth_router(auth: PyAuth) -> APIRouter:
-    router = APIRouter(prefix="/api/auth")
+def build_current_user_bearer_dependency(auth: PyAuth) -> Callable[..., Any]:
+    async def dependency(request: Request):
+        if not auth.settings.security.enable_bearer_tokens:
+            error = AuthenticationError(
+                "Bearer token transport is disabled",
+                code="bearer_transport_disabled",
+            )
+            raise HTTPException(status_code=error.status_code, detail=error.to_dict())
+        authorization = request.headers.get("authorization")
+        if not authorization:
+            error = AuthenticationError("Bearer token is missing", code="missing_bearer_token")
+            raise HTTPException(status_code=error.status_code, detail=error.to_dict())
+
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            error = AuthenticationError("Bearer token is invalid", code="invalid_bearer_token")
+            raise HTTPException(status_code=error.status_code, detail=error.to_dict())
+
+        try:
+            claims = auth.tokens.decode_access_token(token)
+            user_id = str(claims["sub"])
+            adapter = auth._require_adapter()
+            user = await adapter.get_user_by_id(user_id)
+            if user is None:
+                raise AuthenticationError("Token user no longer exists", code="invalid_token_user")
+        except PyAuthError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+        return user
+
+    return dependency
+
+
+def build_fastapi_auth_router(pyauth_router: PyAuthRouter) -> APIRouter:
+    auth = pyauth_router.auth
+    router = APIRouter(prefix=pyauth_router.prefix)
     oauth_cookie = OAuthStateCookieManager(auth.settings)
+
+    def request_context(request: Request):
+        return pyauth_router.build_request(request).to_context()
 
     @router.post("/sign-up")
     async def sign_up(payload: SignUpRequest, request: Request):
@@ -71,7 +115,7 @@ def create_auth_router(auth: PyAuth) -> APIRouter:
                 email=payload.email,
                 password=payload.password,
                 name=payload.name,
-                context=build_request_context(request),
+                context=request_context(request),
             )
         except PyAuthError as exc:
             return _error_response(exc)
@@ -91,7 +135,7 @@ def create_auth_router(auth: PyAuth) -> APIRouter:
             result = await auth.sign_in(
                 email=payload.email,
                 password=payload.password,
-                context=build_request_context(request),
+                context=request_context(request),
             )
         except PyAuthError as exc:
             return _error_response(exc)
@@ -211,7 +255,7 @@ def create_auth_router(auth: PyAuth) -> APIRouter:
                 provider_name=provider_name,
                 code=code,
                 code_verifier=payload["code_verifier"],
-                context=build_request_context(request),
+                context=request_context(request),
             )
         except PyAuthError as exc:
             response = _error_response(exc)
@@ -237,3 +281,15 @@ def create_auth_router(auth: PyAuth) -> APIRouter:
         return response
 
     return router
+
+
+def get_current_user(auth: PyAuth) -> Callable[..., Any]:
+    return build_current_user_dependency(auth)
+
+
+def get_current_user_bearer(auth: PyAuth) -> Callable[..., Any]:
+    return build_current_user_bearer_dependency(auth)
+
+
+def create_auth_router(auth: PyAuth) -> APIRouter:
+    return build_fastapi_auth_router(PyAuthRouter(auth))

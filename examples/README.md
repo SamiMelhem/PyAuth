@@ -1,8 +1,9 @@
 # PyAuth Examples
 
-## FastAPI + SQLAlchemy (Post-Phase 3)
+## FastAPI + SQLAlchemy (Phase 4 Router DX)
 
-A minimal FastAPI app wired to PyAuth with SQLAlchemy and SQLite.
+A minimal FastAPI app wired to PyAuth with SQLAlchemy and SQLite using the
+framework-agnostic `PyAuthRouter` API and PyAuth's built-in development helpers.
 
 ### Run
 
@@ -13,6 +14,11 @@ uv run uvicorn examples.fastapi_sqlalchemy_app:app --reload
 ```
 
 Open http://localhost:8000/docs for the interactive API.
+
+The sample now relies on PyAuth for:
+- development JWT key generation via `PyAuthSettings.for_development(...)`
+- a built-in `ConsoleMailer`
+- the primary framework integration surface through `PyAuthRouter`
 
 ### Try it
 
@@ -44,7 +50,9 @@ curl -X POST http://localhost:8000/api/auth/sign-out -b cookies.txt -c cookies.t
 
 ### OAuth (Google / GitHub)
 
-Replace the placeholder `client_id` and `client_secret` in `fastapi_sqlalchemy_app.py` with real credentials from your provider's developer console. Then visit:
+Replace the placeholder `client_id` and `client_secret` in
+`fastapi_sqlalchemy_app.py` with real credentials from your provider's developer
+console. Then visit:
 
 - http://localhost:8000/api/auth/oauth/google
 - http://localhost:8000/api/auth/oauth/github

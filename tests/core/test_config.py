@@ -252,3 +252,24 @@ def test_pyauth_settings_require_provider_credentials_when_provider_enabled() ->
         )
 
     assert "client_secret" in str(exc_info.value)
+
+
+def test_pyauth_settings_for_development_generates_keys_and_local_defaults() -> None:
+    settings = PyAuthSettings.for_development(
+        issuer="http://localhost:8000",
+        audience="pyauth-sample",
+        social=SocialAuthSettings(
+            google=GoogleProviderSettings(
+                enabled=True,
+                client_id="google-client-id",
+                client_secret="google-client-secret",
+                redirect_uri="http://localhost:8000/api/auth/callback/google",
+            )
+        ),
+    )
+
+    assert settings.jwt.private_key_pem is not None
+    assert settings.jwt.public_key_pem is not None
+    assert settings.cookie.secure is False
+    assert settings.security.require_https is False
+    assert settings.social.google.enabled is True
